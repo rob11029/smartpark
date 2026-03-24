@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python app.py
 
 # 4. Open your browser
-# http://127.0.0.1:5000
+# http://127.0.0.1:5001   (or set PORT=5000 if 5000 is free)
 ```
 
 ## Project Structure

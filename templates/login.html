@@ -3,26 +3,148 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SmartPark — Sign In</title>
+  <title>SmartPark — CSUF Parking</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
 </head>
-<body class="auth-page">
-  <div class="auth-card">
-    <div class="auth-logo">Smart<span>Park</span></div>
-    <p class="auth-sub">Sign in to your CSUF account</p>
-    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
-    <form method="POST">
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="email" required placeholder="you@csu.fullerton.edu"/>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-icon">🅿</div>
+        <div class="logo">Smart<span>Park</span></div>
       </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" name="password" required placeholder="••••••••"/>
+      <p class="logo-sub">CSUF Parking Assistant</p>
+      <div class="live-badge"><div class="live-dot"></div> LIVE DATA</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Navigate</div>
+      <button class="nav-btn active" onclick="setActiveNav(this)">🗺 Dashboard</button>
+      {% if user %}
+      <button class="nav-btn" onclick="setActiveNav(this); loadAnalyticsPanel()">📊 My Analytics</button>
+      {% endif %}
+      <div class="nav-section-label">Parking Lots</div>
+    </nav>
+
+    <div class="sidebar-lots" id="sidebar-lots">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="sidebar-footer">
+      {% if user %}
+        <div class="user-row">
+          <div class="user-avatar">{{ user.email[0].upper() }}</div>
+          <div>
+            <div style="font-size:0.8rem;font-weight:600;color:white">{{ user.email }}</div>
+            <div style="font-size:0.68rem;color:rgba(255,255,255,0.4)">CSUF Student</div>
+          </div>
+        </div>
+        <a href="/logout" class="btn btn-outline">Sign Out</a>
+      {% else %}
+        <a href="/login"    class="btn btn-primary">Sign In</a>
+        <a href="/register" class="btn btn-outline">Register</a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="topbar-title">Campus Parking Overview</div>
+      <div class="topbar-stats">
+        <div class="topbar-stat"><div class="val" id="stat-total">—</div><div class="lbl">Total Spots</div></div>
+        <div class="topbar-stat"><div class="val" id="stat-avail">—</div><div class="lbl">Available</div></div>
+        <div class="topbar-stat"><div class="val" id="stat-last-updated">—</div><div class="lbl">Last Updated</div></div>
+        <div class="topbar-stat"><div class="val" id="stat-lots">6</div><div class="lbl">Locations</div></div>
       </div>
-      <button type="submit" class="btn-auth">Sign In</button>
-    </form>
-    <p class="auth-footer">No account? <a href="/register">Register here</a></p>
+      <div class="topbar-actions">
+        <button class="btn-sm btn-outline-sm" onclick="loadLots()">↺ Refresh</button>
+        <button class="btn-sm btn-orange-sm" onclick="openCheckinModal()">🅿 Travel & Check-in</button>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div id="map"></div>
+
+    <!-- LOT DETAIL OVERLAY -->
+    <div class="detail-overlay" id="detail-overlay">
+      <div class="detail-header">
+        <div class="detail-lot-name" id="detail-name">—</div>
+        <span id="detail-pill" class="status-pill"></span>
+        <button class="detail-close" onclick="closeDetail()">✕</button>
+      </div>
+      <div class="detail-body">
+
+        <!-- Stats row -->
+        <div class="detail-stats">
+          <div class="detail-stat"><div class="val" id="d-available">—</div><div class="lbl">Available</div></div>
+          <div class="detail-stat"><div class="val" id="d-capacity">—</div><div class="lbl">Capacity</div></div>
+          <div class="detail-stat"><div class="val" id="d-pct">—</div><div class="lbl">Open</div></div>
+        </div>
+
+        <!-- Occupancy bar -->
+        <div class="detail-occ-label">
+          <span>Occupancy</span><span id="d-occ-label">—</span>
+        </div>
+        <div class="detail-occ-bar-bg">
+          <div class="detail-occ-bar-fill" id="d-occ-bar" style="width:0%"></div>
+        </div>
+
+        <!-- Primary actions -->
+        <div class="detail-actions">
+          <button class="btn-sm btn-orange-sm"  id="d-checkin-btn">✓ Check In</button>
+          <button class="btn-sm btn-primary-sm" id="d-nav-btn">↗ Navigate</button>
+          <button class="btn-sm btn-outline-sm" id="d-levels-btn"
+                  style="display:none" onclick="toggleLevels()">≡ Levels</button>
+        </div>
+
+        <!-- Per-level breakdown (shown/hidden via toggleLevels()) -->
+        <div id="d-levels-section" style="display:none">
+          <div class="detail-divider"></div>
+          <div class="levels-section-header">
+            <span class="levels-section-title">Level Breakdown</span>
+          </div>
+          <div id="d-levels-body">
+            <!-- populated by parking-levels.js → renderLotLevels() -->
+          </div>
+        </div>
+
+      </div><!-- /.detail-body -->
+    </div><!-- /#detail-overlay -->
+
+    <!-- ANALYTICS OVERLAY -->
+    <div class="detail-overlay" id="analytics-overlay" style="width:340px">
+      <div class="detail-header">
+        <div class="detail-lot-name">My Parking Analytics</div>
+        <button class="detail-close"
+                onclick="document.getElementById('analytics-overlay').classList.remove('show')">✕</button>
+      </div>
+      <div class="detail-body" id="analytics-body">
+        <p class="muted">Loading...</p>
+      </div>
+    </div>
+
+  </main><!-- /.main -->
+
+  <!-- CHECK-IN MODAL -->
+  <div class="modal-overlay" id="modal" onclick="maybeClose(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🅿 Travel & Check-in</h3>
+        <button class="modal-close" onclick="closeCheckinModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-lots"></div>
+    </div>
   </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='js/parking-sync.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/parking-levels.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

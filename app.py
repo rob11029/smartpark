@@ -5,195 +5,234 @@ import os
 import hashlib
 import secrets
 
+from csuf_parking_scraper import (
+    fetch_all_lots_with_levels,
+    fetch_lot_levels,
+    fetch_lot_summary,
+)
+
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'smartpark.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), "smartpark.db")
 
-# ─────────────────────────────────────────
-# DATABASE SETUP
-# ─────────────────────────────────────────
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Parking lots table
-    c.execute('''
+    c.execute("""
         CREATE TABLE IF NOT EXISTS parking_lots (
-            id          INTEGER PRIMARY KEY,
-            name        TEXT NOT NULL,
-            lat         REAL NOT NULL,
-            lng         REAL NOT NULL,
-            capacity    INTEGER NOT NULL,
-            available   INTEGER NOT NULL,
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            lat REAL,
+            lng REAL,
+            capacity INTEGER,
+            available INTEGER,
             last_updated TEXT
         )
-    ''')
+    """)
 
-    # Users table
-    c.execute('''
+    c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            email       TEXT UNIQUE NOT NULL,
-            password    TEXT NOT NULL,
-            created_at  TEXT NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE,
+            password TEXT,
+            created_at TEXT
         )
-    ''')
+    """)
 
-    # Check-ins table
-    c.execute('''
+    c.execute("""
         CREATE TABLE IF NOT EXISTS checkins (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     INTEGER,
-            lot_id      INTEGER NOT NULL,
-            timestamp   TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (lot_id)  REFERENCES parking_lots(id)
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            lot_id INTEGER,
+            timestamp TEXT
         )
-    ''')
-
-    # Seed parking lots if empty (real CSUF data)
-    c.execute('SELECT COUNT(*) FROM parking_lots')
-    if c.fetchone()[0] == 0:
-        lots = [
-            (1, 'Nutwood Structure',       33.878742, -117.888837, 2484, 2275),
-            (2, 'State College Structure', 33.883105, -117.888612, 1373, 1134),
-            (3, 'Eastside North',          33.881100, -117.881850, 1880, 1765),
-            (4, 'Eastside South',          33.879800, -117.881200, 1341, 1028),
-            (5, 'S8 and S10',              33.882000, -117.883500, 2104,  987),
-            (6, 'Fullerton Free Church',   33.876500, -117.890000,  800,    0),
-        ]
-        ts = time.strftime('%Y-%m-%d %H:%M:%S')
-        c.executemany(
-            'INSERT INTO parking_lots (id, name, lat, lng, capacity, available, last_updated) VALUES (?,?,?,?,?,?,?)',
-            [(*l, ts) for l in lots]
-        )
+    """)
 
     conn.commit()
     conn.close()
 
-# ─────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def calculate_status(available, capacity):
-    ratio = available / capacity if capacity else 0
-    if ratio <= 0.0:
-        return 'Closed'
-    elif ratio < 0.2:
-        return 'Full'
-    elif ratio < 0.5:
-        return 'Busy'
-    else:
-        return 'Available'
+    if available is None:
+        return "Closed"
 
-# ─────────────────────────────────────────
-# ROUTES — PAGES
-# ─────────────────────────────────────────
+    ratio = (available / capacity) if capacity else 0
+    if available <= 0:
+        return "Full"
+    if ratio < 0.2:
+        return "Almost Full"
+    if ratio < 0.5:
+        return "Busy"
+    return "Available"
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    return render_template('index.html', user=session.get('user'))
+    return render_template("index.html", user=session.get("user"))
 
-@app.route('/login', methods=['GET', 'POST'])
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        email    = request.form.get('email')
-        password = hash_password(request.form.get('password'))
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        raw_password = request.form.get("password") or ""
+        password = hash_password(raw_password)
+
         conn = get_db()
         user = conn.execute(
-            'SELECT * FROM users WHERE email=? AND password=?', (email, password)
+            "SELECT * FROM users WHERE email=? AND password=?",
+            (email, password)
         ).fetchone()
         conn.close()
-        if user:
-            session['user'] = {'id': user['id'], 'email': user['email']}
-            return redirect(url_for('index'))
-        return render_template('login.html', error='Invalid email or password.')
-    return render_template('login.html')
 
-@app.route('/register', methods=['GET', 'POST'])
+        if user:
+            session["user"] = {"id": user["id"], "email": user["email"]}
+            return redirect(url_for("index"))
+
+        return render_template("login.html", error="Invalid credentials")
+
+    return render_template("login.html")
+
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        email    = request.form.get('email')
-        password = hash_password(request.form.get('password'))
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        raw_password = request.form.get("password") or ""
+
+        if not email or not raw_password:
+            return render_template("register.html", error="Email and password are required")
+
+        password = hash_password(raw_password)
+
         try:
             conn = get_db()
             conn.execute(
-                'INSERT INTO users (email, password, created_at) VALUES (?,?,?)',
-                (email, password, time.strftime('%Y-%m-%d %H:%M:%S'))
+                "INSERT INTO users VALUES (NULL, ?, ?, ?)",
+                (email, password, time.strftime("%Y-%m-%d %H:%M:%S"))
             )
             conn.commit()
             conn.close()
-            return redirect(url_for('login'))
+            return redirect(url_for("login"))
         except sqlite3.IntegrityError:
-            return render_template('register.html', error='Email already registered.')
-    return render_template('register.html')
+            return render_template("register.html", error="Email exists")
 
-@app.route('/logout')
+    return render_template("register.html")
+
+
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
 
-# ─────────────────────────────────────────
-# ROUTES — API
-# ─────────────────────────────────────────
 
-@app.route('/api/lots', methods=['GET'])
+@app.route("/api/parking", methods=["GET"])
+def get_parking():
+    include_levels = request.args.get("include_levels", "false").lower() == "true"
+
+    try:
+        if include_levels:
+            data = fetch_all_lots_with_levels()
+        else:
+            data = fetch_lot_summary()
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to fetch parking",
+            "details": str(e)
+        }), 500
+
+
+@app.route("/api/parking/levels/<path:lot_name>", methods=["GET"])
+def get_levels(lot_name):
+    try:
+        data = fetch_lot_levels(lot_name=lot_name)
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to fetch levels",
+            "details": str(e)
+        }), 500
+
+
+@app.route("/api/lots")
 def get_lots():
     conn = get_db()
-    lots = conn.execute('SELECT * FROM parking_lots').fetchall()
+    rows = conn.execute("SELECT * FROM parking_lots").fetchall()
     conn.close()
-    return jsonify([{
-        'id':           l['id'],
-        'name':         l['name'],
-        'lat':          l['lat'],
-        'lng':          l['lng'],
-        'capacity':     l['capacity'],
-        'available':    l['available'],
-        'status':       calculate_status(l['available'], l['capacity']),
-        'last_updated': l['last_updated']
-    } for l in lots])
 
-@app.route('/api/checkin', methods=['POST'])
+    return jsonify([
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "lat": r["lat"],
+            "lng": r["lng"],
+            "capacity": r["capacity"],
+            "available": r["available"],
+            "status": calculate_status(r["available"], r["capacity"]),
+            "last_updated": r["last_updated"],
+        }
+        for r in rows
+    ])
+
+
+@app.route("/api/checkin", methods=["POST"])
 def checkin():
-    data   = request.get_json()
-    lot_id = data.get('lot_id')
+    data = request.get_json(silent=True) or {}
+    lot_id = data.get("lot_id")
 
-    if not isinstance(lot_id, int):
-        return jsonify({'status': 'error', 'message': 'Invalid lot ID'}), 400
+    if lot_id is None:
+        return jsonify({
+            "status": "error",
+            "message": "Missing lot_id"
+        }), 400
 
     conn = get_db()
-    lot  = conn.execute('SELECT * FROM parking_lots WHERE id=?', (lot_id,)).fetchone()
+    lot = conn.execute("SELECT * FROM parking_lots WHERE id=?", (lot_id,)).fetchone()
 
     if not lot:
         conn.close()
-        return jsonify({'status': 'error', 'message': 'Lot not found'}), 404
+        return jsonify({
+            "status": "error",
+            "message": "Parking lot not found"
+        }), 404
 
-    if lot['available'] <= 0:
+    if lot["available"] is None or lot["available"] <= 0:
         conn.close()
-        return jsonify({'status': 'error', 'message': 'Lot is full'}), 400
+        return jsonify({
+            "status": "error",
+            "message": "Lot full"
+        }), 400
 
-    new_available = lot['available'] - 1
-    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    user = session.get("user")
+    user_id = user["id"] if user else None
+
+    new_available = lot["available"] - 1
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
 
     conn.execute(
-        'UPDATE parking_lots SET available=?, last_updated=? WHERE id=?',
+        "UPDATE parking_lots SET available=?, last_updated=? WHERE id=?",
         (new_available, ts, lot_id)
     )
 
-    # Log check-in if user is logged in
-    user_id = session.get('user', {}).get('id')
     conn.execute(
-        'INSERT INTO checkins (user_id, lot_id, timestamp) VALUES (?,?,?)',
+        "INSERT INTO checkins (user_id, lot_id, timestamp) VALUES (?, ?, ?)",
         (user_id, lot_id, ts)
     )
 
@@ -201,58 +240,66 @@ def checkin():
     conn.close()
 
     return jsonify({
-        'status':    'success',
-        'message':   f'Checked in at {lot["name"]}',
-        'available': new_available,
-        'lot_status': calculate_status(new_available, lot['capacity'])
-    })
+        "status": "success",
+        "message": f"Checked into {lot['name']}",
+        "available": new_available,
+        "lot_id": lot_id,
+        "timestamp": ts
+    }), 200
 
-@app.route('/api/analytics', methods=['GET'])
+
+@app.route("/api/analytics")
 def analytics():
-    user_id = session.get('user', {}).get('id')
-    if not user_id:
-        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+    user = session.get("user")
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
 
+    user_id = user["id"]
     conn = get_db()
 
-    # Total check-ins
-    total = conn.execute(
-        'SELECT COUNT(*) as cnt FROM checkins WHERE user_id=?', (user_id,)
-    ).fetchone()['cnt']
+    total_checkins_row = conn.execute(
+        "SELECT COUNT(*) AS count FROM checkins WHERE user_id=?",
+        (user_id,)
+    ).fetchone()
 
-    # Most visited lot
-    frequent = conn.execute('''
-        SELECT p.name, COUNT(*) as visits
-        FROM checkins c
-        JOIN parking_lots p ON c.lot_id = p.id
-        WHERE c.user_id = ?
-        GROUP BY c.lot_id
-        ORDER BY visits DESC
+    favorite_lot_row = conn.execute("""
+        SELECT parking_lots.id, parking_lots.name, COUNT(*) AS cnt
+        FROM checkins
+        JOIN parking_lots ON parking_lots.id = checkins.lot_id
+        WHERE checkins.user_id=?
+        GROUP BY parking_lots.id, parking_lots.name
+        ORDER BY cnt DESC, parking_lots.name ASC
         LIMIT 1
-    ''', (user_id,)).fetchone()
+    """, (user_id,)).fetchone()
 
-    # Recent check-ins
-    recent = conn.execute('''
-        SELECT p.name, c.timestamp
-        FROM checkins c
-        JOIN parking_lots p ON c.lot_id = p.id
-        WHERE c.user_id = ?
-        ORDER BY c.timestamp DESC
-        LIMIT 5
-    ''', (user_id,)).fetchall()
+    recent_rows = conn.execute("""
+        SELECT checkins.timestamp, parking_lots.name AS lot_name
+        FROM checkins
+        JOIN parking_lots ON parking_lots.id = checkins.lot_id
+        WHERE checkins.user_id=?
+        ORDER BY checkins.timestamp DESC
+        LIMIT 10
+    """, (user_id,)).fetchall()
 
     conn.close()
 
     return jsonify({
-        'total_checkins':  total,
-        'favorite_lot':    dict(frequent) if frequent else None,
-        'recent_checkins': [dict(r) for r in recent]
-    })
+        "total_checkins": total_checkins_row["count"] if total_checkins_row else 0,
+        "favorite_lot": {
+            "id": favorite_lot_row["id"],
+            "name": favorite_lot_row["name"],
+            "count": favorite_lot_row["cnt"],
+        } if favorite_lot_row else None,
+        "recent_checkins": [
+            {
+                "lot_name": row["lot_name"],
+                "timestamp": row["timestamp"],
+            }
+            for row in recent_rows
+        ]
+    }), 200
 
-# ─────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

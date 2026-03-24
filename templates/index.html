@@ -29,6 +29,7 @@
       <div class="nav-section-label">Parking Lots</div>
     </nav>
 
+    <!-- JS should dynamically render each parking lot card into this container -->
     <div class="sidebar-lots" id="sidebar-lots">
       <!-- populated by JS -->
     </div>
@@ -44,7 +45,7 @@
         </div>
         <a href="/logout" class="btn btn-outline">Sign Out</a>
       {% else %}
-        <a href="/login"    class="btn btn-primary">Sign In</a>
+        <a href="/login" class="btn btn-primary">Sign In</a>
         <a href="/register" class="btn btn-outline">Register</a>
       {% endif %}
     </div>
@@ -56,11 +57,29 @@
     <!-- TOP BAR -->
     <div class="topbar">
       <div class="topbar-title">Campus Parking Overview</div>
+
       <div class="topbar-stats">
-        <div class="topbar-stat"><div class="val" id="stat-total">—</div><div class="lbl">Total Spots</div></div>
-        <div class="topbar-stat"><div class="val" id="stat-avail">—</div><div class="lbl">Available</div></div>
-        <div class="topbar-stat"><div class="val" id="stat-lots">6</div><div class="lbl">Locations</div></div>
+        <div class="topbar-stat">
+          <div class="val" id="stat-total" data-summary="total-spots">—</div>
+          <div class="lbl">Total Spots</div>
+        </div>
+
+        <div class="topbar-stat">
+          <div class="val" id="stat-avail" data-summary="total-available">—</div>
+          <div class="lbl">Available</div>
+        </div>
+
+        <div class="topbar-stat">
+          <div class="val" id="stat-last-updated" data-summary="last-updated">—</div>
+          <div class="lbl">Last Updated</div>
+        </div>
+
+        <div class="topbar-stat">
+          <div class="val" id="stat-lots" data-summary="lot-count">—</div>
+          <div class="lbl">Locations</div>
+        </div>
       </div>
+
       <div class="topbar-actions">
         <button class="btn-sm btn-outline-sm" onclick="loadLots()">↺ Refresh</button>
         <button class="btn-sm btn-orange-sm" onclick="openCheckinModal()">🅿 Travel & Check-in</button>
@@ -77,22 +96,66 @@
         <span id="detail-pill" class="status-pill"></span>
         <button class="detail-close" onclick="closeDetail()">✕</button>
       </div>
+
       <div class="detail-body">
+
+        <!-- Stats row -->
         <div class="detail-stats">
-          <div class="detail-stat"><div class="val" id="d-available">—</div><div class="lbl">Available</div></div>
-          <div class="detail-stat"><div class="val" id="d-capacity">—</div><div class="lbl">Capacity</div></div>
-          <div class="detail-stat"><div class="val" id="d-pct">—</div><div class="lbl">Open</div></div>
+          <div class="detail-stat">
+            <div class="val" id="d-available">—</div>
+            <div class="lbl">Available</div>
+          </div>
+          <div class="detail-stat">
+            <div class="val" id="d-capacity">—</div>
+            <div class="lbl">Capacity</div>
+          </div>
+          <div class="detail-stat">
+            <div class="val" id="d-pct">—</div>
+            <div class="lbl">Open</div>
+          </div>
         </div>
+
+        <!-- Occupancy bar -->
         <div class="detail-occ-label">
-          <span>Occupancy</span><span id="d-occ-label">—</span>
+          <span>Occupancy</span>
+          <span id="d-occ-label">—</span>
         </div>
         <div class="detail-occ-bar-bg">
           <div class="detail-occ-bar-fill" id="d-occ-bar" style="width:0%"></div>
         </div>
+
+        <!-- Last updated -->
+        <div class="detail-meta-row">
+          <span class="detail-meta-label">Last Updated:</span>
+          <span class="detail-meta-value" id="d-last-updated">—</span>
+        </div>
+
+        <!-- Primary actions -->
         <div class="detail-actions">
           <button class="btn-sm btn-orange-sm" id="d-checkin-btn">✓ Check In</button>
           <button class="btn-sm btn-primary-sm" id="d-nav-btn">↗ Navigate</button>
+          <button
+            class="btn-sm btn-outline-sm"
+            id="d-levels-btn"
+            style="display:none"
+            onclick="toggleLevels()"
+          >
+            ≡ Levels
+          </button>
         </div>
+
+        <!-- Per-level breakdown -->
+        <div id="d-levels-section" style="display:none">
+          <div class="detail-divider"></div>
+          <div class="levels-section-header">
+            <span class="levels-section-title">Level Breakdown</span>
+          </div>
+
+          <div id="d-levels-body">
+            <!-- populated by JS -->
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -100,7 +163,12 @@
     <div class="detail-overlay" id="analytics-overlay" style="width:340px">
       <div class="detail-header">
         <div class="detail-lot-name">My Parking Analytics</div>
-        <button class="detail-close" onclick="document.getElementById('analytics-overlay').classList.remove('show')">✕</button>
+        <button
+          class="detail-close"
+          onclick="document.getElementById('analytics-overlay').classList.remove('show')"
+        >
+          ✕
+        </button>
       </div>
       <div class="detail-body" id="analytics-body">
         <p class="muted">Loading...</p>
@@ -120,7 +188,36 @@
     </div>
   </div>
 
+  <!-- Optional lot card template for dynamic rendering in sidebar -->
+  <template id="lot-card-template">
+    <div class="lot-card" data-lot="">
+      <div class="lot-card-top">
+        <div class="lot-name"></div>
+        <div class="lot-badge"></div>
+      </div>
+
+      <div class="lot-card-middle">
+        <div class="lot-count"></div>
+        <div class="lot-total"></div>
+      </div>
+
+      <div class="lot-card-bottom">
+        <div class="lot-progress-bar">
+          <div class="lot-progress" style="width:0%"></div>
+        </div>
+        <div class="lot-updated"></div>
+      </div>
+
+      <div class="lot-card-actions">
+        <button class="btn-sm btn-primary-sm view-lot-btn">View</button>
+        <button class="btn-sm btn-outline-sm view-levels-btn" style="display:none">Levels</button>
+      </div>
+    </div>
+  </template>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='js/parking-sync.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/parking-levels.js') }}"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

@@ -83,6 +83,7 @@
       <div class="topbar-actions">
         <button class="btn-sm btn-outline-sm" onclick="loadLots()">↺ Refresh</button>
         <button class="btn-sm btn-orange-sm" onclick="openCheckinModal()">🅿 Travel & Check-in</button>
+        <button class="btn-sm btn-primary-sm" onclick="loadRecommendations()">📍 Recommend Near Me</button>
       </div>
     </div>
 
@@ -172,6 +173,16 @@
       </div>
       <div class="detail-body" id="analytics-body">
         <p class="muted">Loading...</p>
+      </div>
+    </div>
+
+    <div class="detail-overlay" id="recommend-overlay" style="width:360px">
+      <div class="detail-header">
+        <div class="detail-lot-name">Recommended Lots</div>
+        <button class="detail-close" onclick="closeRecommendationPanel()">✕</button>
+      </div>
+      <div class="detail-body" id="recommend-body">
+        <p class="muted">Finding nearby parking...</p>
       </div>
     </div>
 

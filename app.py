@@ -11,6 +11,8 @@ from csuf_parking_scraper import (
     fetch_lot_summary,
 )
 
+from parking_recommender import merge_live_with_db, recommend_lots
+
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
@@ -299,6 +301,47 @@ def analytics():
         ]
     }), 200
 
+@app.route("/api/recommend", methods=["POST"])
+def recommend():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        user_lat = float(data.get("user_lat"))
+        user_lng = float(data.get("user_lng"))
+        limit = max(1, min(int(data.get("limit", 3)), 5))
+    except (TypeError, ValueError):
+        return jsonify({"message": "user_lat, user_lng, and limit must be valid numbers"}), 400
+
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM parking_lots").fetchall()
+    conn.close()
+
+    db_lots = [dict(r) for r in rows]
+
+    try:
+        live_payload = fetch_lot_summary()
+        live_lots = live_payload.get("lots", [])
+    except Exception:
+        live_lots = []
+
+    merged_lots = merge_live_with_db(db_lots, live_lots)
+    recommendations = recommend_lots(
+        user_lat=user_lat,
+        user_lng=user_lng,
+        lots=merged_lots,
+        limit=limit,
+        distance_weight=0.7,
+        available_weight=0.3,
+    )
+
+    for lot in recommendations:
+        lot["status"] = calculate_status(lot["available"], lot["capacity"])
+
+    return jsonify({
+        "user_location": {"lat": user_lat, "lng": user_lng},
+        "weights": {"distance": 0.7, "available": 0.3},
+        "recommendations": recommendations,
+    }), 200
 
 if __name__ == "__main__":
     init_db()

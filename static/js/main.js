@@ -394,11 +394,13 @@ function selectLot(id) {
 
   fillDetailPanelContent(lot);
 
-  const detailOverlay = document.getElementById("detail-overlay");
-  const analyticsOverlay = document.getElementById("analytics-overlay");
+const detailOverlay = document.getElementById("detail-overlay");
+const analyticsOverlay = document.getElementById("analytics-overlay");
+const recommendOverlay = document.getElementById("recommend-overlay");
 
-  if (detailOverlay) detailOverlay.classList.add("show");
-  if (analyticsOverlay) analyticsOverlay.classList.remove("show");
+if (detailOverlay) detailOverlay.classList.add("show");
+if (analyticsOverlay) analyticsOverlay.classList.remove("show");
+if (recommendOverlay) recommendOverlay.classList.remove("show");
 
   renderSidebarLots();
 }
@@ -565,3 +567,94 @@ window.addEventListener("DOMContentLoaded", async () => {
   await loadLots();
   setInterval(loadLots, LIVE_REFRESH_MS);
 });
+
+function formatDistance(distanceM) {
+  if (distanceM >= 1000) return `${(distanceM / 1000).toFixed(2)} km away`;
+  return `${Math.round(distanceM)} m away`;
+}
+
+function closeRecommendationPanel() {
+  const overlay = document.getElementById("recommend-overlay");
+  if (overlay) overlay.classList.remove("show");
+}
+
+function getCurrentPositionAsync(options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported by this browser."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
+
+function openRecommendedLot(lotId) {
+  closeRecommendationPanel();
+  selectLot(lotId);
+}
+
+async function loadRecommendations() {
+  const overlay = document.getElementById("recommend-overlay");
+  const body = document.getElementById("recommend-body");
+  const detailOverlay = document.getElementById("detail-overlay");
+  const analyticsOverlay = document.getElementById("analytics-overlay");
+
+  if (detailOverlay) detailOverlay.classList.remove("show");
+  if (analyticsOverlay) analyticsOverlay.classList.remove("show");
+  if (overlay) overlay.classList.add("show");
+  if (body) body.innerHTML = '<p class="muted">Finding nearby parking...</p>';
+
+  try {
+    const pos = await getCurrentPositionAsync();
+
+    const res = await fetch("/api/recommend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_lat: pos.coords.latitude,
+        user_lng: pos.coords.longitude,
+        limit: 3,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to load recommendations.");
+
+    const items = Array.isArray(data.recommendations) ? data.recommendations : [];
+
+    if (!items.length) {
+      body.innerHTML = '<p class="muted">No nearby lots with known available spots right now.</p>';
+      return;
+    }
+
+    body.innerHTML = items.map((lot, index) => `
+      <div class="recommend-item">
+        <div class="recommend-top">
+          <div class="recommend-rank">#${index + 1}</div>
+          <span class="status-pill ${pillClassForStatus(lot.status)}">${lot.status}</span>
+        </div>
+
+        <div class="recommend-name">${lot.name}</div>
+
+        <div class="recommend-meta">
+          <span class="recommend-chip">${formatDistance(lot.distance_m)}</span>
+          <span class="recommend-chip">${lot.available} spots free</span>
+          <span class="recommend-chip">Score ${Math.round(lot.score * 100)}</span>
+        </div>
+
+        <div class="detail-actions" style="margin-top:0.8rem">
+          <button class="btn-sm btn-primary-sm" onclick="openRecommendedLot(${lot.id})">View</button>
+          <button class="btn-sm btn-outline-sm" onclick="navigateTo(${lot.lat}, ${lot.lng})">Navigate</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) {
+    let message = err.message || "Unable to load recommendations.";
+
+    if (err.code === 1) message = "Location permission was denied.";
+    if (err.code === 2) message = "Unable to determine your current location.";
+    if (err.code === 3) message = "Location request timed out.";
+
+    if (body) body.innerHTML = `<div class="levels-error">${message}</div>`;
+  }
+}

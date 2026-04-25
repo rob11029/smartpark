@@ -87,6 +87,24 @@
       </div>
     </div>
 
+    <!-- Selection by building -->
+    <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+  
+  <select id="buildingSelect" class="btn-sm btn-outline-sm">
+      <option value="library">Library</option>
+      <option value="tsu">Titan Student Union</option>
+      <option value="gym">Gym</option>
+      <option value="mccarthy">McCarthy Hall</option>
+      <option value="gordon">Gordon Hall</option>
+      <option value="langsdorf">Langsdorf Hall</option>
+  </select>
+
+  <button class="btn-sm btn-primary-sm" onclick="recommendBuilding()">
+      🏫 Recommend by Building
+  </button>
+
+</div>
+
     <!-- MAP -->
     <div id="map"></div>
 
@@ -231,4 +249,46 @@
   <script src="{{ url_for('static', filename='js/parking-levels.js') }}"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
+
+<!-- Added this part regarding desination slection -->
+<script>
+async function recommendBuilding() {
+    const building = document.getElementById("buildingSelect").value;
+
+    const response = await fetch("/api/recommend/building", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ building: building })
+    });
+
+    const data = await response.json();
+
+    const panel = document.getElementById("recommend-body");
+
+    if (data.recommendations && data.recommendations.length > 0) {
+        let html = `<h4>Best Parking Near ${building}</h4>`;
+
+        data.recommendations.forEach(lot => {
+            html += `
+                <div style="margin-bottom:10px;">
+                    <strong>${lot.name}</strong><br>
+                    ${lot.available} spots • ${lot.distance_m} meters
+                </div>
+            `;
+        });
+
+        html += `<p style="margin-top:10px;"><em>${data.explanation}</em></p>`;
+
+        panel.innerHTML = html;
+    } else {
+        panel.innerHTML = "No recommendations available.";
+    }
+
+    // OPEN PANEL
+    document.getElementById("recommend-overlay").classList.add("show");
+}
+</script>
+
 </html>

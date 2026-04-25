@@ -1,3 +1,4 @@
+
 from flask import Flask, jsonify, request, render_template, session, redirect, url_for
 import sqlite3
 import time
@@ -14,6 +15,14 @@ from csuf_parking_scraper import (
 from parking_recommender import merge_live_with_db, recommend_lots
 
 app = Flask(__name__)
+BUILDINGS = {
+    "library": {"lat": 33.8816, "lng": -117.8854},
+    "tsu": {"lat": 33.8812, "lng": -117.8845},  # Titan Student Union
+    "gym": {"lat": 33.8830, "lng": -117.8870},
+    "mccarthy": {"lat": 33.8797, "lng": -117.8850},
+    "gordon": {"lat": 33.8789, "lng": -117.8842},
+    "langsdorf": {"lat": 33.8805, "lng": -117.8837}
+}
 app.secret_key = secrets.token_hex(16)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "smartpark.db")
@@ -79,6 +88,23 @@ def calculate_status(available, capacity):
     if ratio < 0.5:
         return "Busy"
     return "Available"
+
+
+#Base Recommendation Contribution
+def generate_explanation(recommendations):
+    if not recommendations:
+        return "No parking lots available right now."
+
+    best = recommendations[0]
+
+    name = best.get("name", "This lot")
+    distance = best.get("distance_m", 0)
+    available = best.get("available", 0)
+
+    return (
+        f"{name} is your best option because it is only {int(distance)} meters away "
+        f"and currently has {available} available spots."
+    )
 
 
 @app.route("/")
@@ -337,11 +363,61 @@ def recommend():
     for lot in recommendations:
         lot["status"] = calculate_status(lot["available"], lot["capacity"])
 
+    explanation = generate_explanation(recommendations)
+
     return jsonify({
-        "user_location": {"lat": user_lat, "lng": user_lng},
-        "weights": {"distance": 0.7, "available": 0.3},
+    "user_location": {"lat": user_lat, "lng": user_lng},
+    "weights": {"distance": 0.7, "available": 0.3},
+    "recommendations": recommendations,
+    "explanation": explanation
+}), 200
+
+
+@app.route("/api/recommend/building", methods=["POST"])
+def recommend_building():
+    data = request.get_json(silent=True) or {}
+    building = (data.get("building") or "").lower()
+
+    if building not in BUILDINGS:
+        return jsonify({"message": "Invalid building"}), 400
+
+    target = BUILDINGS[building]
+
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM parking_lots").fetchall()
+    conn.close()
+
+    db_lots = [dict(r) for r in rows]
+
+    try:
+        live_payload = fetch_lot_summary()
+        live_lots = live_payload.get("lots", [])
+    except Exception:
+        live_lots = []
+
+    merged_lots = merge_live_with_db(db_lots, live_lots)
+
+    recommendations = recommend_lots(
+        user_lat=target["lat"],
+        user_lng=target["lng"],
+        lots=merged_lots,
+        limit=3,
+        distance_weight=0.9,   # prioritize distance more
+        available_weight=0.1,
+    )
+
+    for lot in recommendations:
+        lot["status"] = calculate_status(lot["available"], lot["capacity"])
+
+    explanation = generate_explanation(recommendations)
+
+    return jsonify({
+        "building": building,
         "recommendations": recommendations,
+        "explanation": explanation
     }), 200
+
+
 
 if __name__ == "__main__":
     init_db()

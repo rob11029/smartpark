@@ -1,5 +1,5 @@
 # SmartPark — CSUF Parking Assistant
-CPSC 491 | Team: Roberto Chavez, Shaikh Amin, Xiaohui Gao, Andrew Vu
+CPSC 491 | Team: Roberto Chavez, Shaikh Amin, Xiaohui Gao, Andrew Vu, Amr Mahmoud
 
 ## Setup & Run
 

@@ -534,7 +534,7 @@ function openCheckinModal() {
 
   if (!modal || !modalLots) return;
 
-  modal.classList.add("show");
+  modal.classList.add("open");
   modalLots.innerHTML = parkingLots
     .map(
       (lot) => `
@@ -556,7 +556,7 @@ function openCheckinModal() {
 
 function closeCheckinModal() {
   const modal = document.getElementById("modal");
-  if (modal) modal.classList.remove("show");
+  if (modal) modal.classList.remove("open");
 }
 
 function maybeClose(e) {

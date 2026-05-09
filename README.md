@@ -3,18 +3,39 @@ CPSC 491 | Team: Roberto Chavez, Shaikh Amin, Xiaohui Gao, Andrew Vu, Amr Mahmou
 
 ## Setup & Run
 
+`ModuleNotFoundError: No module named 'flask'` happens when you run **`python3 app.py`** using system Python, but **`pip install`** put packages somewhere else (another Python, or a venv you are not activating). **Install and run with the same interpreter** — the steps below do that.
+
 ```bash
-# 1. Navigate to project folder
+# 1. Go to the app folder (where app.py and requirements.txt live)
 cd smartpark
 
-# 2. Install dependencies
+# 2. Create a virtual environment once (skip if .venv already exists)
+python3 -m venv .venv
+
+# 3. Install dependencies into that venv (not global pip)
+./.venv/bin/pip install -r requirements.txt
+
+# 4. Run with that same venv’s Python
+./.venv/bin/python app.py
+```
+
+Then open **http://127.0.0.1:5001** in your browser (see `app.py` if the port changes).
+
+**Optional — activate the venv instead of `./.venv/bin/...` paths:**
+
+```bash
+cd smartpark
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python app.py               # now uses venv’s python while activated
+```
 
-# 3. Run the app
-python app.py
+**From repo parent folder** (`490Project/`) without `cd smartpark`:
 
-# 4. Open your browser
-# http://127.0.0.1:5001   (or set PORT=5000 if 5000 is free)
+```bash
+python3 -m venv smartpark/.venv
+smartpark/.venv/bin/pip install -r smartpark/requirements.txt
+smartpark/.venv/bin/python smartpark/app.py
 ```
 
 ## Project Structure

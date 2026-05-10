@@ -91,13 +91,25 @@
     <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
   
   <select id="buildingSelect" class="btn-sm btn-outline-sm">
-      <option value="library">Library</option>
-      <option value="tsu">Titan Student Union</option>
-      <option value="gym">Gym</option>
-      <option value="mccarthy">McCarthy Hall</option>
-      <option value="gordon">Gordon Hall</option>
-      <option value="langsdorf">Langsdorf Hall</option>
-  </select>
+    <option value="library">Pollak Library</option>
+    <option value="tsu">Titan Student Union</option>
+    <option value="gym">Student Recreation Center</option>
+    <option value="mccarthy">McCarthy Hall</option>
+    <option value="gordon">Gordon Hall</option>
+    <option value="langsdorf">Langsdorf Hall</option>
+    <option value="mihaylo">Mihaylo Hall</option>
+    <option value="ecs">ECS Building</option>
+    <option value="cs">Computer Science Building</option>
+    <option value="humanities">Humanities Building</option>
+    <option value="education">Education Classroom</option>
+    <option value="engineering">Engineering Building</option>
+    <option value="business">College Park / Business</option>
+    <option value="visualarts">Visual Arts Center</option>
+    <option value="performingarts">Performing Arts Center</option>
+    <option value="healthcenter">Student Health Center</option>
+    <option value="titanhall">Titan Hall</option>
+    <option value="collegepark">College Park</option>
+</select>
 
   <button class="btn-sm btn-primary-sm" onclick="recommendBuilding()">
       🏫 Recommend by Building
@@ -274,7 +286,7 @@ async function recommendBuilding() {
             html += `
                 <div style="margin-bottom:10px;">
                     <strong>${lot.name}</strong><br>
-                    ${lot.available} spots • ${lot.distance_m} meters
+                    ${lot.distance_m} m (${Math.round(lot.distance_m * 3.28084)} ft)
                 </div>
             `;
         });

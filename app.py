@@ -17,11 +17,23 @@ from parking_recommender import merge_live_with_db, recommend_lots
 app = Flask(__name__)
 BUILDINGS = {
     "library": {"lat": 33.8816, "lng": -117.8854},
-    "tsu": {"lat": 33.8812, "lng": -117.8845},  # Titan Student Union
+    "tsu": {"lat": 33.8812, "lng": -117.8845},
     "gym": {"lat": 33.8830, "lng": -117.8870},
     "mccarthy": {"lat": 33.8797, "lng": -117.8850},
     "gordon": {"lat": 33.8789, "lng": -117.8842},
-    "langsdorf": {"lat": 33.8805, "lng": -117.8837}
+    "langsdorf": {"lat": 33.8805, "lng": -117.8837},
+    "mihaylo": {"lat": 33.8785, "lng": -117.8825},
+    "ecs": {"lat": 33.8822, "lng": -117.8820},
+    "cs": {"lat": 33.8820, "lng": -117.8815},
+    "humanities": {"lat": 33.8799, "lng": -117.8848},
+    "education": {"lat": 33.8808, "lng": -117.8862},
+    "engineering": {"lat": 33.8817, "lng": -117.8822},
+    "business": {"lat": 33.8779, "lng": -117.8885},
+    "visualarts": {"lat": 33.8795, "lng": -117.8890},
+    "performingarts": {"lat": 33.8800, "lng": -117.8880},
+    "healthcenter": {"lat": 33.8833, "lng": -117.8858},
+    "titanhall": {"lat": 33.8825, "lng": -117.8875},
+    "collegepark": {"lat": 33.8775, "lng": -117.8892},
 }
 app.secret_key = secrets.token_hex(16)
 
@@ -101,10 +113,13 @@ def generate_explanation(recommendations):
     distance = best.get("distance_m", 0)
     available = best.get("available", 0)
 
+    feet = int(distance * 3.28084)
+
     return (
-        f"{name} is your best option because it is only {int(distance)} meters away "
+        f"{name} is your best option because it is only "
+        f"{int(distance)} meters ({feet} feet) away "
         f"and currently has {available} available spots."
-    )
+)
 
 
 @app.route("/")
